@@ -1,0 +1,36 @@
+name: openldm
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Core Python
+  - python=3.10
+  - pip
+
+  # Geospatial Stack (Critical C++ binaries managed here)
+  - gdal>=3.4.0
+  - rasterio>=1.3.0
+  - libgdal
+  - proj
+  - geos
+
+  # Data Science & Math
+  - numpy>=1.24.0
+  - pandas>=2.0.0
+  - scipy>=1.10.0
+  - scikit-learn>=1.3.0
+  - joblib>=1.3.0
+
+  # GUI Dependencies
+  - pyqt>=5.15.0
+  - pyqtwebengine>=5.15.0
+  
+  # Utilities
+  - path.py
+  - typing_extensions
+
+ 
+
+  # Pip-only dependencies (if any specific ones are needed later)
+  - pip:
+    # - some-pip-only-package 
