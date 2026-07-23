@@ -1,0 +1,47 @@
+# This file contains metadata for your plugin.
+
+# This file should be included when you package your plugin.# Mandatory items:
+
+[general]
+name=OpenLDM
+qgisMinimumVersion=3.0
+description=Launches the OpenLDM Land-Use/Land-Cover change modeling desktop tool from within QGIS.
+version=0.1
+author=Indian Institute of Remote Sensing
+email=jha.ashutosh@gmail.com
+
+about=Open Land Use/Land Cover Dynamic Modeling Platform (OpenLDMP) is an integrated framework for empirical LULC change modeling that supports suitability mapping, demand estimation, spatial and non-spatial allocation, scenario-based simulation, accuracy assessment, visualization, and map composition within a unified environment. It implements multiple suitability modeling techniques, including regression, artificial neural networks (ANN), and random forests (RF), while enabling policy-driven simulations through user-defined demand, land conversion priorities, and class inertia. The platform also incorporates Land Agreement (Pontius) accuracy metrics for comprehensive model evaluation (Jha et al., 2022). Reference: Jha, A., et al. (2022). Open-source Land-use and Land-cover Dynamics Modeling Platform. Journal of the Indian Society of Remote Sensing, 50(6), 1071–1086. https://doi.org/10.1007/s12524-022-01516-9
+
+repository=https://github.com/ashutoshkumarjha/OpenLDMPy
+tracker=https://github.com/ashutoshkumarjha/OpenLDMPy/issues
+# End of mandatory metadata
+
+# Recommended items:
+
+hasProcessingProvider=no
+# Uncomment the following line and add your changelog:
+# changelog=
+
+# Tags are comma separated with spaces allowed
+tags=python
+
+homepage=https://github.com/ashutoshkumarjha/OpenLDMPy
+category=Plugins
+icon=icon.png
+# experimental flag
+experimental=True
+
+# deprecated flag (applies to the whole plugin, not just a single version)
+deprecated=False
+
+# Since QGIS 3.8, a comma separated list of plugins to be installed
+# (or upgraded) can be specified.
+# Check the documentation for more information.
+# plugin_dependencies=
+
+# Category of the plugin: Raster, Vector, Database or Web
+# category=
+
+# If the plugin can run on QGIS Server.
+server=False
+

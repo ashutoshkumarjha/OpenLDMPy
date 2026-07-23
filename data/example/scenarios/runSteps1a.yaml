@@ -1,0 +1,209 @@
+# OpenLDM scenario file -- see LULC/scenario.py for the full format.
+#
+# This one mirrors OpenLDM/src/runSteps1a.R (scenario 5): T1=1985, T2=1995,
+# accuracy checked against 2005, all 4 drivers, spatial context enabled
+# (window 3, 2 steps), allocation order 1-3-4-5-9-6-7-8-2, all classes
+# using logistic regression. Load it via the GUI's File -> Open, or run
+# headlessly with: python src/OpenLDM.py --config data/example/scenarios/runSteps1a_demo.yaml
+#
+# ---------------------------------------------------------------------------
+# model_type reference -- each class's "classes[i].model_type" accepts one
+# of: logistic, regression (linear), nnet (neural), randomForest, svm.
+# This file uses "logistic" for every class (R's runSteps1a.R commented-out
+# alternatives: all-randomForest, all-regression, all-nnet, all-svm, and a
+# *mixed* per-class combination -- same five options, same idea, here as a
+# per-class YAML field instead of a single R model.type=c(...) vector).
+# Uncomment ONE of the templates below in place of "classes:" further down
+# to try a different single model type for every class:
+#
+# classes:  # -- all randomForest --
+# - {name: BuildUp,      class_id: 1, model_type: randomForest, demand: 1331,  inertia: 1.0,  legend_text: Built-up Area}
+# - {name: Agriculture,  class_id: 2, model_type: randomForest, demand: 35634, inertia: 0.98, legend_text: Agricultural Land}
+# - {name: DenseForest,  class_id: 3, model_type: randomForest, demand: 11357, inertia: 0.99, legend_text: Dense Forest}
+# - {name: FallowLand,   class_id: 4, model_type: randomForest, demand: 1722,  inertia: 0.98, legend_text: Fallow Land}
+# - {name: GrassLand,    class_id: 5, model_type: randomForest, demand: 5,     inertia: 1.0,  legend_text: Grass Land}
+# - {name: MixedForest,  class_id: 6, model_type: randomForest, demand: 61,    inertia: 1.0,  legend_text: Mixed Forest}
+# - {name: Plantation,   class_id: 7, model_type: randomForest, demand: 3872,  inertia: 0.98, legend_text: Plantation}
+# - {name: ScrubLand,    class_id: 8, model_type: randomForest, demand: 1622,  inertia: 0.93, legend_text: Scrub Land}
+# - {name: WaterBody,    class_id: 9, model_type: randomForest, demand: 3992,  inertia: 0.76, legend_text: Water Body}
+#
+# classes:  # -- all svm --
+# - {name: BuildUp,      class_id: 1, model_type: svm, demand: 1331,  inertia: 1.0,  legend_text: Built-up Area}
+# - {name: Agriculture,  class_id: 2, model_type: svm, demand: 35634, inertia: 0.98, legend_text: Agricultural Land}
+# - {name: DenseForest,  class_id: 3, model_type: svm, demand: 11357, inertia: 0.99, legend_text: Dense Forest}
+# - {name: FallowLand,   class_id: 4, model_type: svm, demand: 1722,  inertia: 0.98, legend_text: Fallow Land}
+# - {name: GrassLand,    class_id: 5, model_type: svm, demand: 5,     inertia: 1.0,  legend_text: Grass Land}
+# - {name: MixedForest,  class_id: 6, model_type: svm, demand: 61,    inertia: 1.0,  legend_text: Mixed Forest}
+# - {name: Plantation,   class_id: 7, model_type: svm, demand: 3872,  inertia: 0.98, legend_text: Plantation}
+# - {name: ScrubLand,    class_id: 8, model_type: svm, demand: 1622,  inertia: 0.93, legend_text: Scrub Land}
+# - {name: WaterBody,    class_id: 9, model_type: svm, demand: 3992,  inertia: 0.76, legend_text: Water Body}
+#
+# classes:  # -- all nnet (neural regression) --
+# - {name: BuildUp,      class_id: 1, model_type: nnet, demand: 1331,  inertia: 1.0,  legend_text: Built-up Area}
+# - {name: Agriculture,  class_id: 2, model_type: nnet, demand: 35634, inertia: 0.98, legend_text: Agricultural Land}
+# - {name: DenseForest,  class_id: 3, model_type: nnet, demand: 11357, inertia: 0.99, legend_text: Dense Forest}
+# - {name: FallowLand,   class_id: 4, model_type: nnet, demand: 1722,  inertia: 0.98, legend_text: Fallow Land}
+# - {name: GrassLand,    class_id: 5, model_type: nnet, demand: 5,     inertia: 1.0,  legend_text: Grass Land}
+# - {name: MixedForest,  class_id: 6, model_type: nnet, demand: 61,    inertia: 1.0,  legend_text: Mixed Forest}
+# - {name: Plantation,   class_id: 7, model_type: nnet, demand: 3872,  inertia: 0.98, legend_text: Plantation}
+# - {name: ScrubLand,    class_id: 8, model_type: nnet, demand: 1622,  inertia: 0.93, legend_text: Scrub Land}
+# - {name: WaterBody,    class_id: 9, model_type: nnet, demand: 3992,  inertia: 0.76, legend_text: Water Body}
+#
+# classes:  # -- all regression (linear) --
+# - {name: BuildUp,      class_id: 1, model_type: regression, demand: 1331,  inertia: 1.0,  legend_text: Built-up Area}
+# - {name: Agriculture,  class_id: 2, model_type: regression, demand: 35634, inertia: 0.98, legend_text: Agricultural Land}
+# - {name: DenseForest,  class_id: 3, model_type: regression, demand: 11357, inertia: 0.99, legend_text: Dense Forest}
+# - {name: FallowLand,   class_id: 4, model_type: regression, demand: 1722,  inertia: 0.98, legend_text: Fallow Land}
+# - {name: GrassLand,    class_id: 5, model_type: regression, demand: 5,     inertia: 1.0,  legend_text: Grass Land}
+# - {name: MixedForest,  class_id: 6, model_type: regression, demand: 61,    inertia: 1.0,  legend_text: Mixed Forest}
+# - {name: Plantation,   class_id: 7, model_type: regression, demand: 3872,  inertia: 0.98, legend_text: Plantation}
+# - {name: ScrubLand,    class_id: 8, model_type: regression, demand: 1622,  inertia: 0.93, legend_text: Scrub Land}
+# - {name: WaterBody,    class_id: 9, model_type: regression, demand: 3992,  inertia: 0.76, legend_text: Water Body}
+#
+# classes:  # -- mixed, one type per class (R: model.type=c('randomForest',
+#           #    'logistic','svm','nnet','randomForest','logistic','svm',
+#           #    'nnet','randomForest') -- any mix is valid, GUI's
+#           #    "Individual Selection" mode does the same thing per row) --
+# - {name: BuildUp,      class_id: 1, model_type: randomForest, demand: 1331,  inertia: 1.0,  legend_text: Built-up Area}
+# - {name: Agriculture,  class_id: 2, model_type: logistic,     demand: 35634, inertia: 0.98, legend_text: Agricultural Land}
+# - {name: DenseForest,  class_id: 3, model_type: svm,          demand: 11357, inertia: 0.99, legend_text: Dense Forest}
+# - {name: FallowLand,   class_id: 4, model_type: nnet,         demand: 1722,  inertia: 0.98, legend_text: Fallow Land}
+# - {name: GrassLand,    class_id: 5, model_type: randomForest, demand: 5,     inertia: 1.0,  legend_text: Grass Land}
+# - {name: MixedForest,  class_id: 6, model_type: logistic,     demand: 61,    inertia: 1.0,  legend_text: Mixed Forest}
+# - {name: Plantation,   class_id: 7, model_type: svm,          demand: 3872,  inertia: 0.98, legend_text: Plantation}
+# - {name: ScrubLand,    class_id: 8, model_type: nnet,         demand: 1622,  inertia: 0.93, legend_text: Scrub Land}
+# - {name: WaterBody,    class_id: 9, model_type: randomForest, demand: 3992,  inertia: 0.76, legend_text: Water Body}
+# ---------------------------------------------------------------------------
+scenario_version: 1
+data:
+  t1_file: ./data/example/LULC/1985.tif
+  t1_year: 1985
+  t2_file: ./data/example/LULC/1995.tif
+  t2_year: 1995
+  output_file: ./data/example/outputdata/Test-neighwithNA-allocNA-134596782-logistic-2005-re.tif
+  na_value: null
+  area_of_interest_file: null
+  mask_file: null
+drivers:
+  t1:
+    DistanceToDrainage: ./data/example/Drivers/drivers_85/dist_stream.img
+    DistanceToBuiltup: ./data/example/Drivers/drivers_85/Dist_urban.img
+    DistanceToRoad: ./data/example/Drivers/drivers_85/road_final.img
+    Elevation: ./data/example/Drivers/commonDrivers/elevation.img
+  t2:
+    DistanceToDrainage: ./data/example/Drivers/drivers_95/dist_stream.img
+    DistanceToBuiltup: ./data/example/Drivers/drivers_95/Dist_urban.img
+    DistanceToRoad: ./data/example/Drivers/drivers_95/road_final.img
+    Elevation: ./data/example/Drivers/commonDrivers/elevation.img
+classes:
+- name: BuildUp
+  class_id: 1
+  model_type: logistic
+  demand: 1331
+  inertia: 1.0
+  legend_text: Built-up Area
+  colour: null
+- name: Agriculture
+  class_id: 2
+  model_type: logistic
+  demand: 35634
+  inertia: 0.98
+  legend_text: Agricultural Land
+  colour: null
+- name: DenseForest
+  class_id: 3
+  model_type: logistic
+  demand: 11357
+  inertia: 0.99
+  legend_text: Dense Forest
+  colour: null
+- name: FallowLand
+  class_id: 4
+  model_type: logistic
+  demand: 1722
+  inertia: 0.98
+  legend_text: Fallow Land
+  colour: null
+- name: GrassLand
+  class_id: 5
+  model_type: logistic
+  demand: 5
+  inertia: 1.0
+  legend_text: Grass Land
+  colour: null
+- name: MixedForest
+  class_id: 6
+  model_type: logistic
+  demand: 61
+  inertia: 1.0
+  legend_text: Mixed Forest
+  colour: null
+- name: Plantation
+  class_id: 7
+  model_type: logistic
+  demand: 3872
+  inertia: 0.98
+  legend_text: Plantation
+  colour: null
+- name: ScrubLand
+  class_id: 8
+  model_type: logistic
+  demand: 1622
+  inertia: 0.93
+  legend_text: Scrub Land
+  colour: null
+- name: WaterBody
+  class_id: 9
+  model_type: logistic
+  demand: 3992
+  inertia: 0.76
+  legend_text: Water Body
+  colour: null
+# conversion_order has two valid forms:
+#  - "TP" (used below): system-computed transition-potential order, the
+#    default, matches runSteps1a.R's own myconversion='TP' (which
+#    overrides the matrix immediately below it, also present but unused
+#    in that script).
+#  - an explicit N x N matrix (one row/column per class, in class order),
+#    R's own commented-out alternative in runSteps1a.R, reproduced here:
+#
+# allocation:
+#   class_allocation_order: [1, 3, 4, 5, 9, 6, 7, 8, 2]
+#   conversion_order:
+#   - [1, 5, 3, 2, 4, 6, 7, 8, 9]
+#   - [2, 1, 4, 3, 5, 6, 7, 8, 9]
+#   - [2, 5, 1, 3, 4, 6, 7, 8, 9]
+#   - [2, 4, 3, 1, 5, 6, 7, 8, 9]
+#   - [2, 5, 4, 3, 1, 6, 7, 8, 9]
+#   - [2, 5, 4, 3, 6, 1, 7, 8, 9]
+#   - [2, 5, 4, 3, 6, 7, 1, 8, 9]
+#   - [2, 5, 4, 3, 6, 7, 8, 1, 9]
+#   - [4, 6, 5, 3, 7, 8, 9, 2, 1]
+allocation:
+  class_allocation_order:
+  - 1
+  - 3
+  - 4
+  - 5
+  - 9
+  - 6
+  - 7
+  - 8
+  - 2
+  conversion_order: TP
+spatial_context:
+  enabled: true
+  window_size: 3
+  steps: 2
+  write_step_output: true
+suitability_file_directory: ./data/example/outputdata/
+accuracy_assessment:
+  reference_file: ./data/example/LULC/2005.tif
+  predicted_file: null
+  base_file: ./data/example/LULC/1995.tif
+  display_mode: classwise
+map_composition:
+  source_file: ./data/example/LULC/1985.tif
+  export_file: null
+  title: Predicted Land Use / Land Cover 1985
+  legend_heading: LULC Classes

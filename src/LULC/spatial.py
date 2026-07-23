@@ -1,110 +1,98 @@
+"""Neighborhood / focal spatial operations, array-native.
+
+Ports:
+
+* ``ComputeNW`` / ``ParallelComputeNearByWeight`` -> :func:`compute_nearby_weights`
+* the ``focal(...)`` neighborhood-density blending used inside
+  ``genratePredictedMap``'s multi-step branch -> :func:`focal_density`
+
+The Markov ``get_yearly_transition_matrix`` that previously lived here moved
+to :mod:`transition` (and was re-derived from the R source's live behavior).
+
+Faithfulness notes (Rasterise_dev_68akj.r lines 2069-2187, 2300-2321):
+
+* ``ParallelComputeNearByWeight`` contains ``if(!is.na(wSize)){ wSize=3 }`` —
+  any supplied window size is **forced to 3** before the distance clamp. This
+  is reachable, output-affecting behavior (the multi-step branch always calls
+  with the GUI's window size), so it is replicated here.
+* Distance weights are ``as.integer(dst / min(dst[dst > 0]))``: Euclidean
+  distance to the nearest cell of the class, divided by the smallest positive
+  distance found anywhere on the grid, truncated to integer. Cells of the
+  class itself get weight 0; every other cell gets weight >= 1.
+"""
+
+from __future__ import annotations
+
+from typing import Dict, Optional, Sequence
+
 import numpy as np
-import pandas as pd
-from scipy.ndimage import convolve
-from .data_io import DataManager
-from .config import logger, NA_VALUE  # ← ADD THIS LINE
-import os
+from joblib import Parallel, delayed
+from scipy import ndimage
 
-# ... rest of functions unchanged ...
+from .config import PARALLEL_BACKEND, PARALLEL_JOBS, logger
 
 
-def get_yearly_transition_matrix(tm_values, steps=1):
+def _nearby_weight_single(
+    class_mask: np.ndarray,
+    pixel_size_xy: tuple,
+    window_size: Optional[int],
+) -> np.ndarray:
+    """Integer distance-to-nearest-class weights for one class (R: ComputeNW)."""
+    xres, yres = pixel_size_xy
+    if not class_mask.any():
+        return np.zeros(class_mask.shape, dtype=np.int64)
+
+    dst = ndimage.distance_transform_edt(~class_mask, sampling=(abs(yres), abs(xres)))
+
+    if window_size is not None:
+        # R: ParallelComputeNearByWeight forces wSize=3 before ComputeNW's clamp.
+        forced = 3
+        lardist = float(np.sqrt(abs(xres) * abs(yres)) * forced)
+        dst = np.minimum(dst, lardist)
+
+    positive = dst[dst > 0]
+    min_positive = positive.min() if positive.size else 1.0
+    return (dst / min_positive).astype(np.int64)
+
+
+def compute_nearby_weights(
+    class_codes: np.ndarray,
+    class_ids: Sequence[int],
+    pixel_size_xy: tuple,
+    window_size: Optional[int] = None,
+    n_jobs: int = PARALLEL_JOBS,
+) -> Dict[int, np.ndarray]:
+    """Per-class integer proximity weights on the full grid.
+
+    Port of R's ``ParallelComputeNearByWeight`` (one worker per class). Returns
+    ``{class_id: (rows, cols) int array}``; weight 0 marks cells currently of
+    that class, larger values are farther from the nearest occurrence.
     """
-    Decomposes a multi-year transition matrix using Matrix Logarithm/Exponential.
+    logger.info(f"Computing neighborhood weights for {len(class_ids)} classes...")
+    masks = [(class_codes == cid) for cid in class_ids]
+    n_jobs = min(len(class_ids), n_jobs) if n_jobs > 0 else n_jobs
+    results = Parallel(n_jobs=n_jobs, backend=PARALLEL_BACKEND)(
+        delayed(_nearby_weight_single)(mask, pixel_size_xy, window_size) for mask in masks
+    )
+    return {cid: w for cid, w in zip(class_ids, results)}
+
+
+def focal_density(
+    presence: np.ndarray,
+    window_size: int,
+    invalid_mask: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Windowed count of class presence around each cell.
+
+    Port of the multi-step branch's ``focal(tmp, w=windowMatrix, pad=TRUE,
+    padValue=0)`` followed by ``f[is.na(t2)] <- NA`` and ``f[f == 0] <- 1``
+    (Rasterise_dev_68akj.r lines 2312-2315). Returns a float array where
+    invalid cells are NaN and zero-neighborhood cells are lifted to 1.
     """
-    row_sums = tm_values.sum(axis=1, keepdims=True)
-    row_sums[row_sums == 0] = 1
-    P = tm_values / row_sums
-    
-    # Estimate Yearly Generator Matrix Q
-    # P_step = P ^ (1/steps) => Q = logm(P) / steps
-    try:
-        Q = logm(P) / steps
-        P_yearly = expm(Q)
-        # Handle small complex errors from logm
-        P_yearly = np.real(P_yearly)
-    except Exception as e:
-        logger.warning(f"Matrix decomposition failed: {e}. Using linear interpolation.")
-        P_yearly = P # Fallback
-        
-    final_counts = P_yearly * row_sums
-    return np.round(final_counts).astype(int)
-
-# src/LULC/spatial.py (Add to existing file)
-
-import os
-from scipy.ndimage import convolve
-from .data_io import DataManager
-from .config import logger
-
-def compute_neighbor_weights(df_grid, neighbour_params, na_value=NA_VALUE, reference_raster=None):
-    """
-    FULL R: ParallelComputeNearByWeight() + ComputeNearByWeight()
-    Focal convolution for neighborhood weights.
-    """
-    logger.info("Computing Neighborhood Weights...")
-    
-    window_size = neighbour_params[0] if neighbour_params else 3
-    kernel_size = window_size
-    kernel = np.ones((kernel_size, kernel_size))
-    kernel = kernel / kernel.sum()  # Normalize
-    
-    # Get grid shape
-    with DataManager.open(reference_raster) as src:
-        height, width = src.shape
-        grid_shape = (height, width)
-    
-    # Process each class column
-    class_cols = [col for col in df_grid.columns if col != 'id']
-    neighbor_weights = {}
-    
-    for class_col in class_cols:
-        class_grid_2d = df_grid[class_col].values.reshape(grid_shape)
-        class_grid_2d = np.nan_to_num(class_grid_2d, nan=0.0)
-        
-        # Focal convolution (R: focal() equivalent)
-        neighbor_grid = convolve(class_grid_2d, kernel, mode='constant', cval=0.0)
-        neighbor_flat = neighbor_grid.flatten()
-        
-        # Restore NA mask
-        na_mask = pd.isna(df_grid[class_col])
-        neighbor_flat[na_mask] = np.nan
-        
-        neighbor_df = pd.DataFrame({
-            'id': df_grid['id'],
-            'weight': neighbor_flat
-        }).sort_values('weight', ascending=False)
-        
-        neighbor_weights[class_col] = neighbor_df
-    
-    return neighbor_weights
-
-def create_neighbor_maps(neighbor_weights, reference_raster, output_directory, class_names):
-    """R: createNeighbourMap()"""
-    logger.info(f"Saving neighbor maps: {output_directory}")
-    os.makedirs(output_directory, exist_ok=True)
-    
-    for class_name, nw_df in neighbor_weights.items():
-        nw_file = os.path.join(output_directory, f"{class_name}_NW.tif")
-        DataManager.dataframe_to_raster(
-            nw_df.rename(columns={'weight': 'NeighborWeight'}),
-            reference_raster,
-            nw_file,
-            'NeighborWeight'
-        )
-        logger.info(f"  ✓ {nw_file}")
-
-def create_suitability_maps(suitability_maps, reference_raster, output_directory, class_names):
-    """R: createSuitabilityMap()"""
-    logger.info(f"Saving suitability maps: {output_directory}")
-    os.makedirs(output_directory, exist_ok=True)
-    
-    for class_name, sm_df in suitability_maps.items():
-        sm_file = os.path.join(output_directory, f"{class_name}_SM.tif")
-        DataManager.dataframe_to_raster(
-            sm_df.rename(columns={'weight': 'Suitability'}),
-            reference_raster,
-            sm_file,
-            'Suitability'
-        )
-        logger.info(f"  ✓ {sm_file}")
+    kernel = np.ones((window_size, window_size))
+    density = ndimage.convolve(presence.astype(float), kernel, mode="constant", cval=0.0)
+    density = np.rint(density)
+    density[density == 0] = 1.0
+    if invalid_mask is not None:
+        density[invalid_mask] = np.nan
+    return density

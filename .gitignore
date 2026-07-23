@@ -1,10 +1,13 @@
-*.pyc
-*~
-*DS_Store
-example/outputdata/*.tif
-**/__pycache__/**
-**/*.log
-**/src/*.pdf
-src/.Rapp.history
-src/.Rhistory
-src/.RData
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Test / tooling caches
+.pytest_cache/
+
+# OS
+.DS_Store
+
+# Runtime session logs written by the app (src/<timestamp>-*.log)
+src/*.log

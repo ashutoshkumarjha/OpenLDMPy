@@ -1,0 +1,83 @@
+﻿<html>
+	
+<head>
+	<title>System requirements</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="generator" content="HelpNDoc Personal Edition 3.9.1.648">
+	<link type="text/css" rel="stylesheet" media="all" href="css/reset.css" />
+	<link type="text/css" rel="stylesheet" media="all" href="css/base.css" />
+	<link type="text/css" rel="stylesheet" media="all" href="css/hnd.css" />
+	<!--[if lte IE 8]>
+		<link type="text/css" rel="stylesheet" media="all" href="css/ielte8.css" />
+	<![endif]-->
+	<style type="text/css">
+		#topic_header
+		{
+			background-color: #EFEFEF;
+		}
+	</style>
+	<script type="text/javascript" src="js/jquery.min.js"></script>
+	<script type="text/javascript" src="js/hnd.js"></script>
+	<script type="text/javascript">
+		$(document).ready(function()
+		{
+			if (top.frames.length == 0)
+			{
+				var sTopicUrl = top.location.href.substring(top.location.href.lastIndexOf("/") + 1, top.location.href.length);
+				top.location.href = "OpenLDM.html?" + sTopicUrl;
+			}
+			else if (top && top.FrameTOC && top.FrameTOC.SelectTocItem)
+			{
+				top.FrameTOC.SelectTocItem("Systemrequirements");
+			}
+		});
+	</script>
+</head>
+
+<body>
+
+	<div id="topic_header">
+			<div id="topic_header_content">
+				<h1>System requirements</h1>
+				
+				<div id="topic_breadcrumb">
+					<a href="GettingStarted.html">Getting Started</a> &rsaquo;&rsaquo; </div>
+				</div>
+			<div id="topic_header_nav">
+				<a href="GettingStarted.html"><img src="img/arrow_up.png" alt="Parent"/></a>
+				
+				<a href="GettingStarted.html"><img src="img/arrow_left.png" alt="Previous"/></a>
+				
+				<a href="Systemsetup.html"><img src="img/arrow_right.png" alt="Next"/></a>
+				
+				</div>
+			<div class="clear"></div>
+		</div>
+	<div id="topic_content">
+		
+<p></p>
+<p class="rvps2"><span class="rvts6"> </span><span class="rvts8">This software runs anywhere Python 3.10 runs — Windows, Linux and macOS. The system hardware requirement depends entirely on the size of the rasters you're modeling; there is no R dependency at all. Because the geospatial stack (GDAL/rasterio/geopandas) relies on binary libraries, Conda or Mamba is the recommended way to install dependencies. </span></p>
+<p class="rvps2"><span class="rvts31">Option 1: Conda/Mamba (recommended)</span></p>
+<p class="rvps6"><span class="rvts8">Step 1. Install </span><a class="rvts9" href="https://github.com/conda-forge/miniforge">Miniforge/Mamba</a><span class="rvts8"> (or Anaconda/Miniconda) as per its instructions.</span></p>
+<p class="rvps6"><span class="rvts8">Step 2. From the repository root, create the environment from the bundled </span><span class="rvts16">environment.yml</span><span class="rvts8">:</span></p>
+<p class="rvps6"><span class="rvts8"> &nbsp; &nbsp; &nbsp; &nbsp;</span><span class="rvts16">mamba env create -f environment.yml</span></p>
+<p class="rvps6"><span class="rvts8">Step 3. Activate it:</span></p>
+<p class="rvps6"><span class="rvts8"> &nbsp; &nbsp; &nbsp; &nbsp;</span><span class="rvts16">mamba activate openldm</span></p>
+<p class="rvps2"><span class="rvts6">+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++</span></p>
+<p class="rvps2"><span class="rvts31">Option 2: Pip only (no Conda/Mamba available)</span></p>
+<p class="rvps6"><span class="rvts8">You must manually ensure GDAL's C++ headers are installed on your system first, then:</span></p>
+<p class="rvps6"><span class="rvts8"> &nbsp; &nbsp; &nbsp; &nbsp;</span><span class="rvts16">pip install -r requirements.txt</span></p>
+<p class="rvps6"><span class="rvts8">Use one option or the other, never both in the same environment — layering </span><span class="rvts16">requirements.txt</span><span class="rvts8"> on top of a Conda env can overwrite the Conda-managed </span><span class="rvts16">pyqtwebengine</span><span class="rvts8"> build with a mismatched pip build and break the GUI's Help tab.</span></p>
+<p></p>
+<p class="rvps4"><span class="rvts10">(OpenLDM) v1.0 </span><a class="rvts11" href="http://www.iirs.gov.in/">IIRS</a></p>
+</div>
+	
+	<div id="topic_footer">
+
+			<div id="topic_footer_content">
+				Copyright &copy; IIRS  by Ashutosh Kumar Jha. All Rights Reserved.</div>
+		</div>
+	</body>
+	
+</html>
+

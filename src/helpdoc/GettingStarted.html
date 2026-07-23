@@ -1,0 +1,77 @@
+﻿<html>
+	
+<head>
+	<title>Getting Started</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="generator" content="HelpNDoc Personal Edition 3.9.1.648">
+	<link type="text/css" rel="stylesheet" media="all" href="css/reset.css" />
+	<link type="text/css" rel="stylesheet" media="all" href="css/base.css" />
+	<link type="text/css" rel="stylesheet" media="all" href="css/hnd.css" />
+	<!--[if lte IE 8]>
+		<link type="text/css" rel="stylesheet" media="all" href="css/ielte8.css" />
+	<![endif]-->
+	<style type="text/css">
+		#topic_header
+		{
+			background-color: #EFEFEF;
+		}
+	</style>
+	<script type="text/javascript" src="js/jquery.min.js"></script>
+	<script type="text/javascript" src="js/hnd.js"></script>
+	<script type="text/javascript">
+		$(document).ready(function()
+		{
+			if (top.frames.length == 0)
+			{
+				var sTopicUrl = top.location.href.substring(top.location.href.lastIndexOf("/") + 1, top.location.href.length);
+				top.location.href = "OpenLDM.html?" + sTopicUrl;
+			}
+			else if (top && top.FrameTOC && top.FrameTOC.SelectTocItem)
+			{
+				top.FrameTOC.SelectTocItem("GettingStarted");
+			}
+		});
+	</script>
+</head>
+
+<body>
+
+	<div id="topic_header">
+			<div id="topic_header_content">
+				<h1>Getting Started</h1>
+				
+				</div>
+			<div id="topic_header_nav">
+				<a href="Whatsnew.html"><img src="img/arrow_left.png" alt="Previous"/></a>
+				
+				<a href="Systemrequirements.html"><img src="img/arrow_right.png" alt="Next"/></a>
+				
+				</div>
+			<div class="clear"></div>
+		</div>
+	<div id="topic_content">
+		
+<p></p>
+<p class="rvps2"><span class="rvts8">This software is a pure-Python application, supported on Windows, Linux and macOS. </span></p>
+<p class="rvps5"><span class="rvts8">It runs as a </span><span class="rvts7">standalone desktop application</span><span class="rvts8"> (PyQt5 GUI) and also works </span><span class="rvts7">headlessly from the command line</span><span class="rvts8"> for batch processing or HPC use — both through the same entry point, </span><span class="rvts14">OpenLDM.py</span><span class="rvts8">. There is no R or rpy2 runtime dependency: the modeling pipeline (data I/O, transition matrices, suitability modeling, allocation, accuracy assessment, cartographic export) is implemented natively in Python using</span></p>
+<p class="rvps5"><span class="rvts8">Geospatial I/O - </span><span class="rvts14">rasterio, GDAL, geopandas</span></p>
+<p class="rvps5"><span class="rvts8">Modeling - </span><span class="rvts14">scikit-learn</span><span class="rvts8"> (logistic regression, random forest, SVM, neural network)</span></p>
+<p class="rvps5"><span class="rvts8">Parallel processing - </span><span class="rvts14">joblib</span></p>
+<p class="rvps5"><span class="rvts8">Cartographic export - </span><span class="rvts14">matplotlib</span></p>
+<p class="rvps5"><span class="rvts8">GUI - </span><span class="rvts14">PyQt5</span></p>
+<p class="rvps5"><span class="rvts8"> A QGIS Processing plugin is planned as a separate, future migration subtask (not yet built on top of the core package). This software has been tested with the following software versions:</span></p>
+<p class="rvps5"><span class="rvts8">Python 3.10</span></p>
+<p class="rvps5"><span class="rvts8">PyQt5 5.15</span></p>
+<p></p>
+<p class="rvps4"><span class="rvts10">(OpenLDM) v1.0 </span><a class="rvts11" href="http://www.iirs.gov.in/">IIRS</a></p>
+</div>
+	
+	<div id="topic_footer">
+
+			<div id="topic_footer_content">
+				Copyright &copy; IIRS  by Ashutosh Kumar Jha. All Rights Reserved.</div>
+		</div>
+	</body>
+	
+</html>
+

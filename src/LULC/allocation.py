@@ -1,190 +1,275 @@
+"""Competitive land allocation engine.
+
+Faithful, array-native port of R's ``getAllocatedDT``
+(Rasterise_dev_68akj.r lines 28-374) and ``removeAllocateGrid`` (379-387).
+
+The four phases of the R algorithm are preserved exactly:
+
+1. **Inertia retention** — for each class with inertia > 0, lock
+   ``floor(inertia * TM[i,i])`` of its current cells to stay put. R sorts the
+   candidates by suitability **ascending** and locks the first n — i.e. the
+   *least* suitable current cells are guaranteed retention, leaving the most
+   suitable ones in the competitive pool. Reproduced as-is.
+2. **Competitive allocation** — outer loop over ``classAllocationOrder``
+   (which orders the **from** classes), inner loop over the conversion-order
+   priority list of target classes. Candidate cells are unallocated cells of
+   the from-class; ordering depends on the demand share:
+   * share > 5% of the target row: keep the top-``demand`` cells by target
+     suitability (with ties past the cutoff), then allocate in order of
+     **proximity to existing target-class patches** (neighbour weight
+     ascending).
+   * share <= 5%: the R code's final reordering step compares ids against a
+     whole data.table with ``%in%`` (line 213), which matches nothing — the
+     branch therefore allocates **zero cells**, leaving the demand for the
+     fallback phases. Reproduced (with a log warning), per the
+     preserve-live-behavior rule for faithfully porting observed R behavior.
+3. **Optimum fallback** — any from-class whose remaining unallocated current
+   cells exactly equal its remaining outbound demand gets all of them
+   reassigned to itself (R warns "allocation cost Increasing"). Cells
+   allocated in this phase are **not** removed from the candidate pools (R
+   omits the removeAllocateGrid call here) — which is exactly what makes
+   phase 4 able to re-assign them.
+4. **Retreat pass** — re-attempts leftover demand restricted to cells already
+   allocated to the from-class. Because phases 1/2 removed their allocations
+   from the pools, only phase-3 allocations are still visible here, so the
+   retreat pass can only re-assign those.
+
+Tie-breaking: every R sort is data.table's stable ``order()`` over tables
+initially keyed by id, so within equal weights ids ascend. All numpy sorts
+below use ``np.lexsort`` with id as the secondary key to match exactly.
+
+Returns a flat int array over all grid cells: allocated class id per cell, 0
+where unallocated/NA (R returns the equivalent one-hot table with NA rows).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Sequence, Union
+
 import numpy as np
-import pandas as pd
+
 from .config import logger
 
-def get_allocated_dt(suitability_dict, transition_matrix, current_landuse_series, 
-                     allocation_order, conversion_order, class_names, spatial_restrictions):
-    """
-    Faithful port of R's getAllocatedDT.
-    
+
+@dataclass
+class AllocationResult:
+    allocated: np.ndarray  # flat int array, 0 = unallocated/NA
+    warnings: List[str] = field(default_factory=list)
+
+
+def derive_conversion_order(transition_matrix: np.ndarray) -> np.ndarray:
+    """R's conversionOrder='TP' derivation: row i is the list of target-class
+    indices (0-based) sorted by transition count descending, ties by column
+    ascending."""
+    tm = np.asarray(transition_matrix)
+    n = tm.shape[0]
+    order = np.empty((n, n), dtype=int)
+    cols = np.arange(n)
+    for i in range(n):
+        order[i] = np.lexsort((cols, -tm[i]))
+    return order
+
+
+def _ordered(ids: np.ndarray, weights: np.ndarray, descending: bool) -> np.ndarray:
+    """ids sorted by weight (NaN last), ties by id ascending — matching R's
+    stable order() on id-keyed tables."""
+    w = weights.astype(float)
+    nan_mask = np.isnan(w)
+    if descending:
+        w = np.where(nan_mask, -np.inf, w)
+        order = np.lexsort((ids, -w))
+    else:
+        w = np.where(nan_mask, np.inf, w)
+        order = np.lexsort((ids, w))
+    return ids[order]
+
+
+def get_allocated(
+    suitability: Dict[int, np.ndarray],
+    transition_matrix: np.ndarray,
+    current_codes: np.ndarray,
+    neighbour_weights: Dict[int, np.ndarray],
+    class_ids: Sequence[int],
+    pool_ids: np.ndarray,
+    restrict_spatial_migration: Optional[Sequence[float]] = None,
+    conversion_order: Union[str, np.ndarray] = "TP",
+    class_allocation_order: Optional[Sequence[int]] = None,
+) -> AllocationResult:
+    """Allocate future land use (R: getAllocatedDT).
+
     Args:
-        suitability_dict: {ClassName: DataFrame(id, weight)} (Sorted descending)
-        transition_matrix: Numpy Array [From, To] (The budget of pixels to move)
-        current_landuse_series: Series of current class IDs (1-based)
-        allocation_order: List of Target Class IDs (Priority for 'To' Class)
-        conversion_order: Matrix or List defining priority of 'From' Class
-        class_names: List of class names (indexed 0..N-1)
-        spatial_restrictions: List of inertia values [0..1] per class (1=No Change)
+        suitability: {class_id: (rows, cols) float suitability array}.
+        transition_matrix: target cell-count matrix (from x to), 1 row/col
+            per entry of ``class_ids``.
+        current_codes: (rows, cols) current class-code array.
+        neighbour_weights: {class_id: (rows, cols) int proximity array}
+            (0 = cell currently of that class).
+        class_ids: 1-based class codes, in matrix row/col order.
+        pool_ids: flat indices of cells eligible for allocation (R: the
+            suitability tables' id set — cells with usable driver data).
+        restrict_spatial_migration: per-class inertia in [0, 1].
+        conversion_order: 'TP' (derive from transition_matrix) or an
+            (n, n) array whose row i lists 1-based target class ids in
+            priority order.
+        class_allocation_order: 1-based from-class processing order.
     """
-    logger.info("Starting Competitive Allocation (R-Logic)...")
+    class_ids = list(class_ids)
+    n = len(class_ids)
+    id_of = {cid: k for k, cid in enumerate(class_ids)}
 
-    n_pixels = len(current_landuse_series)
-    
-    # 1. Initialize Output (-1 = Unallocated)
-    # R: outputAllocation[] <- NA
-    final_allocation = np.full(n_pixels, -1, dtype=int)
-    
-    # Clean inputs (handle NaNs from One-Hot or previous steps)
-    # 0 is used as 'No Data' placeholder here since classes are 1-based
-    current_classes = np.nan_to_num(current_landuse_series.values, nan=0).astype(int)
-    
-    # R: newTM <- transitionMat
-    budget_matrix = transition_matrix.copy()
+    new_tm = np.array(transition_matrix, dtype=float).copy()
+    warnings: List[str] = []
 
-    # =========================================================================
-    # PHASE 1: HANDLING INERTIA (RestrictSpatialMigration)
-    # R: if(restrictSpatialMigrationTM[i] > 0) ... noOfGridRestrictedBasedOnInertia
-    # =========================================================================
-    logger.info("Phase 1: Applying Spatial Inertia...")
-    
-    for i, inertia in enumerate(spatial_restrictions):
-        class_id = i + 1  # 1-based ID
-        
-        # How many pixels of this class exist?
-        current_pixels_mask = (current_classes == class_id)
-        total_pixels = np.sum(current_pixels_mask)
-        
-        # R: restrictSpatialMigrationTM[i] * newTM[i,i] 
-        # (This implies inertia applies to the diagonal 'Persistence' element)
-        persistence_budget = budget_matrix[i, i]
-        
-        # Calculate how many MUST stay (locked)
-        # In R logic, inertia often forces a specific number to remain
-        # If inertia is 1.0, ALL persistence budget is locked immediately.
-        locked_count = int(inertia * persistence_budget)
-        
-        if locked_count > 0:
-            # Find the most suitable pixels to KEEP (usually highest suitability for itself)
-            # R uses suitability or neighbor weight to decide which specific pixels stay
-            
-            # Get suitability for staying (Class i -> Class i)
-            cls_name = class_names[i]
-            if cls_name in suitability_dict:
-                # Filter scores for pixels that are CURRENTLY this class
-                scores_df = suitability_dict[cls_name]
-                
-                # We need to map global IDs to the boolean mask
-                # Only consider pixels that are currently this class
-                candidate_ids = scores_df[scores_df['id'].isin(np.where(current_pixels_mask)[0])]['id'].values
-                
-                # Take top N
-                n_lock = min(len(candidate_ids), locked_count)
-                ids_to_lock = candidate_ids[:n_lock]
-                
-                # Allocate them to themselves (Lock them)
-                final_allocation[ids_to_lock] = class_id
-                
-                # Reduce budget
-                budget_matrix[i, i] -= n_lock
-                
-                # logger.debug(f"  Class {class_id}: Locked {n_lock} pixels due to inertia.")
+    flat_codes = np.asarray(current_codes).ravel()
+    n_cells = flat_codes.size
 
-    # =========================================================================
-    # PHASE 2: COMPETITIVE ALLOCATION
-    # R: Loop classAllocationOrder (To) -> Loop conversionOrder (From)
-    # =========================================================================
-    logger.info("Phase 2: Competitive Allocation Loop...")
-    
-    for target_step, target_cls_id in enumerate(allocation_order):
-        # target_cls_id is 1-based
-        target_idx = target_cls_id - 1
-        target_name = class_names[target_idx]
-        
-        if target_name not in suitability_dict:
-            logger.warning(f"  Missing suitability map for {target_name}")
+    suit_flat = {cid: np.asarray(s).ravel() for cid, s in suitability.items()}
+    nw_flat = {cid: np.asarray(w).ravel() for cid, w in neighbour_weights.items()}
+
+    allocated = np.zeros(n_cells, dtype=int)  # 0 = unallocated (R: NA row)
+    in_pool = np.zeros(n_cells, dtype=bool)
+    in_pool[pool_ids] = True
+
+    if restrict_spatial_migration is None:
+        inertia = np.zeros(n)
+    else:
+        inertia = np.asarray(restrict_spatial_migration, dtype=float)
+
+    if class_allocation_order is None:
+        from_order = list(range(n))
+    else:
+        from_order = [id_of[c] for c in class_allocation_order]
+
+    if isinstance(conversion_order, str) and conversion_order == "TP":
+        conv = derive_conversion_order(new_tm)
+    else:
+        conv = np.asarray(conversion_order, dtype=int)
+        conv = np.vectorize(id_of.get)(conv)  # 1-based class ids -> 0-based indices
+
+    def candidates(mask: np.ndarray) -> np.ndarray:
+        return np.nonzero(mask)[0]
+
+    # ---- Phase 1: inertia retention (R lines 114-144) -----------------------
+    for k, cid in enumerate(class_ids):
+        if inertia[k] <= 0:
             continue
-            
-        # Get sorted suitability for Target Class
-        # R: probableGridToAllocate <- suitablityMat[[classToAllocate]]
-        target_scores_df = suitability_dict[target_name]
-        
-        # Inner Loop: From which class are we converting?
-        # R: for(j in 1:noOfClass) { classToAllocate <- conversionOrderMat... }
-        # Note: The R script logic variable naming is confusing (classFromAllocate vs classToAllocate).
-        # Standard interpretation: We iterate through sources to fill the target.
-        
-        # If 'conversionOrder' is 'TP' or None, we just iterate 1..N
-        # If it's a matrix, we follow the row/col priority.
-        # Let's assume standard iteration 0..N-1 for source classes
-        source_indices = range(len(class_names))
-        
-        for source_idx in source_indices:
-            source_cls_id = source_idx + 1
-            
-            # Check remaining budget for Source -> Target
-            pixels_needed = budget_matrix[source_idx, target_idx]
-            
-            if pixels_needed <= 0:
+        n_lock = int(np.floor(inertia[k] * new_tm[k, k]))
+        if n_lock <= 0:
+            continue
+        cand = candidates(in_pool & (nw_flat[cid] == 0))
+        # R sorts ascending by suitability and locks the first n.
+        cand = _ordered(cand, suit_flat[cid][cand], descending=False)
+        n_lock = min(n_lock, cand.size)
+        lock_ids = cand[:n_lock]
+        allocated[lock_ids] = cid
+        in_pool[lock_ids] = False
+        new_tm[k, k] -= n_lock
+
+    # ---- Phase 2: competitive allocation (R lines 154-254) ------------------
+    for from_idx in from_order:
+        from_cid = class_ids[from_idx]
+        for j in range(n):
+            to_idx = int(conv[from_idx, j])
+            to_cid = class_ids[to_idx]
+            demand = new_tm[from_idx, to_idx]
+            if demand <= 0:
                 continue
-                
-            # R: Filter candidates
-            # 1. Must currently be Source Class
-            # 2. Must NOT be allocated yet
-            
-            # Efficient Filtering using Set logic on IDs or Boolean Masks
-            # Get all IDs that are currently Source Class
-            current_source_mask = (current_classes == source_cls_id)
-            # Get all IDs that are Unallocated
-            unalloc_mask = (final_allocation == -1)
-            
-            valid_candidates_mask = current_source_mask & unalloc_mask
-            valid_candidate_ids = np.where(valid_candidates_mask)[0]
-            
-            if len(valid_candidate_ids) == 0:
-                continue
-            
-            # Now intersect valid_candidate_ids with the Sorted Suitability list
-            # We want the HIGHEST suitability pixels that are in valid_candidate_ids
-            
-            # Filter the pre-sorted suitability dataframe
-            # Boolean indexing on a large DataFrame can be slow, but it guarantees order
-            candidates_sorted = target_scores_df[target_scores_df['id'].isin(valid_candidate_ids)]
-            
-            # Check if we have enough
-            n_available = len(candidates_sorted)
-            n_take = min(n_available, int(pixels_needed))
-            
+
+            cand = candidates(in_pool & (allocated == 0) & (nw_flat[from_cid] == 0))
+            if to_idx != from_idx:
+                cand = cand[nw_flat[to_cid][cand] != 0]
+                n_cand = cand.size
+                if n_cand > demand:
+                    row_total = new_tm[to_idx].sum()
+                    share = demand / row_total if row_total > 0 else np.inf
+                    if share > 0.05:
+                        by_suit = _ordered(cand, suit_flat[to_cid][cand], descending=True)
+                        cutoff = suit_flat[to_cid][by_suit[int(demand) - 1]]
+                        keep = cand[suit_flat[to_cid][cand] >= cutoff]
+                        chosen_order = _ordered(keep, nw_flat[to_cid][keep].astype(float), descending=False)
+                    else:
+                        # R's small-share branch ends by matching ids against a
+                        # data.table with %in%, which never matches: nothing is
+                        # allocated here (see module docstring).
+                        msg = (
+                            f"Small-share transition {from_cid}->{to_cid} "
+                            f"(share <= 5%): R allocates nothing here; deferring "
+                            f"{int(demand)} cells to fallback phases"
+                        )
+                        logger.warning(msg)
+                        warnings.append(msg)
+                        chosen_order = np.array([], dtype=int)
+                else:
+                    if n_cand < demand:
+                        msg = f"Not Enough Probable Grid from Class {from_cid} for to Class {to_cid}"
+                        logger.warning(msg)
+                        warnings.append(msg)
+                    # count <= demand: all candidates are taken; R's ordering
+                    # differences here don't change the selected set.
+                    chosen_order = _ordered(cand, suit_flat[to_cid][cand], descending=True)
+            else:
+                chosen_order = _ordered(cand, suit_flat[from_cid][cand], descending=True)
+
+            n_take = min(int(demand), chosen_order.size)
             if n_take > 0:
-                # Extract Top N IDs
-                ids_to_allocate = candidates_sorted['id'].values[:n_take]
-                
-                # Assign
-                final_allocation[ids_to_allocate] = target_cls_id
-                
-                # Update Budget
-                budget_matrix[source_idx, target_idx] -= n_take
-                
-                # logger.debug(f"  Allocated {n_take} pixels: {class_names[source_idx]} -> {target_name}")
+                take = chosen_order[:n_take]
+                allocated[take] = to_cid
+                in_pool[take] = False
+                new_tm[from_idx, to_idx] -= n_take
 
-    # =========================================================================
-    # PHASE 3: FINAL CLEANUP (Handling Unallocated)
-    # R: outputAllocation[is.na] <- original
-    # =========================================================================
-    logger.info("Phase 3: Finalizing Unallocated Pixels...")
-    
-    mask_unalloc = (final_allocation == -1)
-    
-    # 1. First, try to fill "Persistence" (Self -> Self) if budget remains
-    # This handles pixels that were eligible to stay but weren't locked by inertia
-    for i in range(len(class_names)):
-        cls_id = i + 1
-        remaining_self_budget = budget_matrix[i, i]
-        
-        if remaining_self_budget > 0:
-            # Find unallocated pixels of this class
-            mask_self_unalloc = mask_unalloc & (current_classes == cls_id)
-            idxs = np.where(mask_self_unalloc)[0]
-            
-            n_fill = min(len(idxs), int(remaining_self_budget))
-            if n_fill > 0:
-                final_allocation[idxs[:n_fill]] = cls_id
-                budget_matrix[i, i] -= n_fill
-                # Update main mask
-                mask_unalloc[idxs[:n_fill]] = False
+    # ---- Phase 3: optimum fallback (R lines 256-274) -------------------------
+    if new_tm.sum() != 0:
+        row_remaining = new_tm.sum(axis=1)
+        for from_idx in range(n):
+            from_cid = class_ids[from_idx]
+            cand = candidates(in_pool & (allocated == 0) & (nw_flat[from_cid] == 0))
+            if row_remaining[from_idx] > 0 and cand.size == row_remaining[from_idx]:
+                allocated[cand] = from_cid
+                # R does NOT remove these from the pools — phase 4 depends on it.
+                msg = "allocation cost Increasing"
+                logger.warning(msg)
+                warnings.append(msg)
 
-    # 2. Absolute fallback: Whatever is left keeps its original class
-    # (Even if budget says it should have moved, if we couldn't find a target)
-    mask_still_unalloc = (final_allocation == -1)
-    final_allocation[mask_still_unalloc] = current_classes[mask_still_unalloc]
+        # ---- Phase 4: retreat pass (R lines 282-367) --------------------------
+        for from_idx in from_order:
+            from_cid = class_ids[from_idx]
+            for j in range(n):
+                to_idx = j
+                to_cid = class_ids[to_idx]
+                demand = new_tm[from_idx, to_idx]
+                if demand <= 0:
+                    continue
 
-    return final_allocation
+                assigned_here = candidates(in_pool & (allocated == from_cid))
+                if to_idx != from_idx:
+                    cand = assigned_here[nw_flat[to_cid][assigned_here] != 0]
+                    fromto = assigned_here[nw_flat[from_cid][assigned_here] == 0]
+                    if fromto.size > demand and cand.size > demand:
+                        by_suit = _ordered(cand, suit_flat[to_cid][cand], descending=True)
+                        cutoff = suit_flat[to_cid][by_suit[int(demand) - 1]]
+                        keep = cand[suit_flat[to_cid][cand] >= cutoff]
+                        chosen_order = _ordered(keep, nw_flat[to_cid][keep].astype(float), descending=False)
+                    else:
+                        msg = f"Increasing Cost no help {from_cid} for to Class {to_cid}"
+                        logger.warning(msg)
+                        warnings.append(msg)
+                        chosen_order = _ordered(cand, suit_flat[to_cid][cand], descending=True)
+                else:
+                    cand = assigned_here[nw_flat[from_cid][assigned_here] == 0]
+                    chosen_order = _ordered(cand, suit_flat[from_cid][cand], descending=True)
+
+                n_take = min(int(demand), chosen_order.size)
+                if n_take > 0:
+                    take = chosen_order[:n_take]
+                    allocated[take] = to_cid
+                    in_pool[take] = False
+                    new_tm[from_idx, to_idx] -= n_take
+
+    leftover = new_tm.sum()
+    if leftover != 0:
+        msg = f"Allocation finished with {int(leftover)} unmet transition-demand cells"
+        logger.warning(msg)
+        warnings.append(msg)
+
+    return AllocationResult(allocated=allocated, warnings=warnings)
